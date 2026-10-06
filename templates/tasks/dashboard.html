@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Today{% endblock %}
+{% block head %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4">
+  <div><p class="eyebrow mb-1">YOUR DAILY CHECKLIST</p><h1 class="mb-1">{{ today|date:"l, F j" }}</h1><p class="text-secondary mb-0">{{ completed_count }} of {{ task_count }} tasks complete</p></div>
+  <div class="progress-ring"><strong>{{ completed_count }} / {{ task_count }}</strong><span>done today</span></div>
+</div>
+<div class="row g-4">
+  <section class="col-lg-7">
+    <div class="card panel mb-4"><div class="card-body p-4">
+      <div class="d-flex justify-content-between align-items-center mb-3"><h2 class="h5 mb-0">Today’s checklist</h2><span class="badge text-bg-light">{{ task_count }} tasks</span></div>
+      {% if tasks %}
+      <div class="task-list">
+      {% for task in tasks %}
+        <article class="task-row {% if task.recurrence == 'none' and task.is_completed or task.recurrence != 'none' and task.id in completed_recurring %}is-done{% endif %}">
+          <form method="post" action="{% url 'toggle_task' task.id %}" class="d-flex align-items-start gap-3 flex-grow-1">{% csrf_token %}<input type="hidden" name="date" value="{{ today|date:'Y-m-d' }}">
+            <button class="task-check" aria-label="Toggle {{ task.title }}" type="submit">{% if task.recurrence == 'none' and task.is_completed or task.recurrence != 'none' and task.id in completed_recurring %}✓{% endif %}</button>
+            <span class="flex-grow-1"><span class="task-title">{{ task.title }}</span><span class="task-meta">{% if task.due_time %}{{ task.due_time|time:"g:i A" }} · {% endif %}{{ task.get_priority_display }}{% if task.recurrence != 'none' %} · {{ task.get_recurrence_display }}{% endif %}</span></span>
+          </form>
+          <form method="post" action="{% url 'delete_task' task.id %}">{% csrf_token %}<input type="hidden" name="next" value="dashboard"><button class="btn btn-sm btn-link text-secondary" aria-label="Delete {{ task.title }}">×</button></form>
+        </article>
+      {% endfor %}
+      </div>
+      {% else %}<div class="empty-state"><span>☕</span><p>Nothing on your list yet. Add a task to get started.</p></div>{% endif %}
+    </div></div>
+    <div class="card panel"><div class="card-body p-4"><h2 class="h5 mb-3">Quick add</h2>
+      <form method="post" action="{% url 'create_task' %}">{% csrf_token %}
+        <div class="mb-3">{{ form.title }}</div>
+        <details><summary class="small text-secondary mb-3">Date, reminder and more</summary>
+          <div class="row g-2 mb-3"><div class="col-md-6">{{ form.due_date }}</div><div class="col-md-6">{{ form.due_time }}</div><div class="col-md-6">{{ form.reminder_at }}</div><div class="col-md-6">{{ form.recurrence }}</div><div class="col-md-6">{{ form.priority }}</div></div>{{ form.notes }}
+        </details>
+        <button class="btn btn-primary mt-3" type="submit">Add task</button>
+      </form>
+    </div></div>
+  </section>
+  <aside class="col-lg-5">
+    <div class="card panel mb-4"><div class="card-body p-4"><h2 class="h5 mb-3">This week</h2><canvas id="weekly-chart" height="210" aria-label="Completed tasks by day"></canvas></div></div>
+    <div class="card panel mb-4"><div class="card-body p-4"><div class="d-flex justify-content-between"><h2 class="h5">Pomodoro</h2><span class="text-secondary small">Focus session</span></div>
+      {% if active_pomodoro %}<div class="timer" data-started="{{ active_pomodoro.started_at|date:'c' }}" data-duration="{{ active_pomodoro.duration_minutes }}"><strong id="timer-display">25:00</strong><span>remaining</span></div><form id="finish-pomodoro" method="post" action="{% url 'finish_pomodoro' active_pomodoro.id %}">{% csrf_token %}<button class="btn btn-outline-secondary btn-sm w-100">End session</button></form>
+      {% else %}<form method="post" action="{% url 'pomodoro' %}" class="d-flex gap-2">{% csrf_token %}<select name="duration" class="form-select" aria-label="Pomodoro duration"><option value="25">25 min</option><option value="15">15 min</option><option value="45">45 min</option><option value="60">60 min</option></select><button class="btn btn-primary text-nowrap">Start focus</button></form>{% endif %}
+    </div></div>
+    <div class="card panel"><div class="card-body p-4"><h2 class="h5 mb-3">Coming up</h2>
+      {% for task in upcoming %}<div class="upcoming-row"><span>{{ task.title }}</span><time>{{ task.due_date|date:"M j" }}</time></div>{% empty %}<p class="text-secondary small mb-0">No upcoming one-off tasks.</p>{% endfor %}
+    </div></div>
+  </aside>
+</div>
+{{ chart_labels|json_script:"chart-labels" }}{{ chart_completed|json_script:"chart-completed" }}{{ chart_created|json_script:"chart-created" }}
+{% endblock %}
+{% block scripts %}<script>
+const labels=JSON.parse(document.getElementById("chart-labels").textContent), completed=JSON.parse(document.getElementById("chart-completed").textContent), created=JSON.parse(document.getElementById("chart-created").textContent);
+if(window.Chart){new Chart(document.getElementById("weekly-chart"),{type:"bar",data:{labels,datasets:[{label:"Completed",data:completed,backgroundColor:"#6c63ff",borderRadius:5},{label:"Added",data:created,backgroundColor:"#dfe1f4",borderRadius:5}]},options:{responsive:true,plugins:{legend:{position:"bottom"}},scales:{y:{beginAtZero:true,ticks:{precision:0}}}}});}
+const timer=document.querySelector(".timer");
+if(timer){const display=document.getElementById("timer-display"), end=new Date(timer.dataset.started).getTime()+Number(timer.dataset.duration)*60000;function tick(){const left=Math.max(0,Math.ceil((end-Date.now())/1000));display.textContent=String(Math.floor(left/60)).padStart(2,"0")+":"+String(left%60).padStart(2,"0");if(left===0){document.title="Focus complete · Daily";document.getElementById("finish-pomodoro").submit();return;}setTimeout(tick,1000);}tick();}
+const pomodoroForm=document.querySelector('form[action="{% url 'pomodoro' %}"]');
+if(pomodoroForm&&"Notification" in window&&Notification.permission==="default"){pomodoroForm.addEventListener("submit",()=>Notification.requestPermission());}
+</script>{% endblock %}
