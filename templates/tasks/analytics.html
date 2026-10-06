@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Productivity{% endblock %}
+{% block head %}<script src="{% static 'vendor/chart.umd.min.js' %}"></script>{% endblock %}
+{% block content %}
+<section class="planner-header">
+  <div><p class="eyebrow">A CLEARER PICTURE</p><h1>Productivity</h1><p class="welcome-note">Estimated effort, focused time, and the progress you’ve made.</p></div>
+  <div class="period-switch"><a class="{% if days == 7 %}active{% endif %}" href="?days=7">7 days</a><a class="{% if days == 30 %}active{% endif %}" href="?days=30">30 days</a><a class="{% if days == 90 %}active{% endif %}" href="?days=90">90 days</a></div>
+</section>
+<section class="metric-grid">
+  <article class="metric-card"><span>Completed tasks</span><strong>{{ completed_count }}</strong><small>Completed in this period</small></article>
+  <article class="metric-card"><span>Extended tasks</span><strong>{{ extended_count }}</strong><small>Tasks given more time</small></article>
+  <article class="metric-card"><span>Completion rate</span><strong>{{ completion_rate }}%</strong><small>Of tasks due this period</small></article>
+  <article class="metric-card"><span>Estimated hours</span><strong>{{ estimated_hours }}h</strong><small>Planned deliverable time</small></article>
+  <article class="metric-card"><span>Actual hours</span><strong>{{ actual_hours }}h</strong><small>Tracked with task timers</small></article>
+  <article class="metric-card score-card"><span>Productivity score</span><strong>{{ productivity_score }}<small>/100</small></strong><small>Completion × estimate-to-actual efficiency</small></article>
+</section>
+<section class="analytics-chart-panel"><div class="widget-heading"><div><p class="eyebrow">YOUR RECENT RHYTHM</p><h2>Progress over time</h2></div><span>{{ start_day|date:"M j" }} – {{ today|date:"M j" }}</span></div><canvas id="analytics-chart" height="120" aria-label="Completed tasks and tracked effort by day"></canvas></section>
+<p class="analytics-method">Tracked time comes from Start/Pause/Stop task timers. Estimated hours sum the deliverable estimates for tasks due in the selected period. The productivity score is completion rate adjusted by estimated-to-actual time efficiency.</p>
+{{ chart_labels|json_script:"analytics-labels" }}{{ chart_completed|json_script:"analytics-completed" }}{{ chart_seconds|json_script:"analytics-seconds" }}
+{% endblock %}
+{% block scripts %}<script>
+const ctx=document.getElementById("analytics-chart");if(window.Chart&&ctx){const labels=JSON.parse(document.getElementById("analytics-labels").textContent),completed=JSON.parse(document.getElementById("analytics-completed").textContent),seconds=JSON.parse(document.getElementById("analytics-seconds").textContent);new Chart(ctx,{type:"bar",data:{labels,datasets:[{label:"Completed tasks",data:completed,backgroundColor:"#655dc9",borderRadius:5,yAxisID:"tasks"},{label:"Tracked hours",data:seconds.map(value=>+(value/3600).toFixed(1)),type:"line",borderColor:"#4c9872",backgroundColor:"#4c9872",tension:.35,yAxisID:"hours"}]},options:{responsive:true,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"bottom"}},scales:{tasks:{beginAtZero:true,ticks:{precision:0}},hours:{beginAtZero:true,position:"right",grid:{drawOnChartArea:false}}}}});}
+</script>{% endblock %}

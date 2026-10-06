@@ -4,11 +4,16 @@
 <p class="eyebrow mb-1">PREFERENCES</p><h1 class="mb-4">Settings &amp; backup</h1>
 <div class="row g-4">
   <div class="col-lg-6"><section class="card panel h-100"><div class="card-body p-4"><h2 class="h5">Appearance</h2><p class="text-secondary small">Choose how Daily looks on this device.</p>
-    <form method="post">{% csrf_token %}<label class="form-label" for="theme">Color theme</label><div class="d-flex gap-2"><select id="theme" name="theme" class="form-select"><option value="light" {% if request.session.theme == 'light' or not request.session.theme %}selected{% endif %}>Light</option><option value="dark" {% if request.session.theme == 'dark' %}selected{% endif %}>Dark</option><option value="system" {% if request.session.theme == 'system' %}selected{% endif %}>Use system setting</option></select><button class="btn btn-primary">Save</button></div></form>
+    <form method="post">{% csrf_token %}<label class="form-label" for="theme">Color theme</label><div class="d-flex gap-2"><select id="theme" name="theme" class="form-select"><option value="light" {% if saved_theme == 'light' %}selected{% endif %}>Light</option><option value="dark" {% if saved_theme == 'dark' %}selected{% endif %}>Dark</option><option value="system" {% if saved_theme == 'system' %}selected{% endif %}>Use system setting</option></select><button class="btn btn-primary">Save</button></div></form>
   </div></section></div>
-  <div class="col-lg-6"><section class="card panel h-100"><div class="card-body p-4"><h2 class="h5">Export and backup</h2><p class="text-secondary small">Download a spreadsheet or a complete SQLite backup of your local data.</p><div class="d-flex flex-wrap gap-2 mb-4"><a class="btn btn-outline-primary" href="{% url 'export_excel' %}">Export Excel</a><a class="btn btn-outline-primary" href="{% url 'backup' %}">Download backup</a></div>
+  <div class="col-lg-6"><section class="card panel h-100"><div class="card-body p-4"><h2 class="h5">Export and backup</h2><p class="text-secondary small">Download a spreadsheet or save a dated SQLite backup on this computer.</p><p class="small text-secondary">Local backups: {{ backup_count }}<br>Backup folder: <code>{{ backup_directory }}</code></p><div class="d-flex flex-wrap gap-2 mb-4"><a class="btn btn-outline-primary" href="{% url 'export_excel' %}">Export Excel</a><a class="btn btn-outline-primary" href="{% url 'backup' %}">Save &amp; download backup</a></div>
     <hr><h3 class="h6">Restore a backup</h3><p class="small text-secondary">Restoring replaces the current database. Keep a copy of your current data first.</p>
     <form method="post" action="{% url 'restore' %}" enctype="multipart/form-data">{% csrf_token %}<label for="backup" class="form-label">SQLite backup file</label><input id="backup" class="form-control mb-3" type="file" name="backup" accept=".sqlite3,.db" required><button class="btn btn-danger" type="submit" onclick="return confirm('Replace all current data with this backup?')">Restore backup</button></form>
   </div></section></div>
 </div>
+<p class="small text-secondary mt-4">Daily {{ app_version }} · <a href="{% url 'about' %}">About and release notes</a></p>
 {% endblock %}
+{% block scripts %}<script>
+const themeSelect=document.getElementById("theme"),themeForm=themeSelect?.form;
+if(themeSelect){themeSelect.value=document.documentElement.dataset.theme;themeForm?.addEventListener("submit",()=>localStorage.setItem("daily-theme",themeSelect.value));}
+</script>{% endblock %}

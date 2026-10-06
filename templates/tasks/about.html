@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}About {{ app_name }}{% endblock %}
+{% block content %}
+<section class="planner-header">
+  <div><p class="eyebrow">APPLICATION INFORMATION</p><h1>About {{ app_name }}</h1><p class="welcome-note">A private, local-first daily planner for Windows.</p></div>
+  <a class="btn btn-outline-primary" href="{% url 'settings' %}">Settings</a>
+</section>
+<section class="card panel mb-4">
+  <div class="card-body p-4">
+    <h2 class="h5">{{ app_name }}</h2>
+    <dl class="row mb-0">
+      <dt class="col-sm-3">Version</dt><dd class="col-sm-9">{{ app_version }}</dd>
+      <dt class="col-sm-3">Build date</dt><dd class="col-sm-9">{{ build_date }}</dd>
+      <dt class="col-sm-3">Data location</dt><dd class="col-sm-9"><code>{{ data_directory }}</code></dd>
+    </dl>
+  </div>
+</section>
+<section class="card panel">
+  <div class="card-body p-4">
+    <p class="eyebrow mb-1">WHAT'S NEW</p><h2 class="h5 mb-4">Release notes</h2>
+    {% for release in release_notes %}
+    <article class="release-note">
+      <div class="d-flex flex-wrap align-items-baseline justify-content-between gap-2"><h3 class="h6 mb-1">{{ release.title }}</h3><span class="small text-secondary">Version {{ release.version }}</span></div>
+      <ul class="small text-secondary mb-3">{% for change in release.changes %}<li>{{ change }}</li>{% endfor %}</ul>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

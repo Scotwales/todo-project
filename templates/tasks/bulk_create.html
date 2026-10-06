@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Plan tasks{% endblock %}
+{% block content %}
+<section class="page-intro">
+  <p class="eyebrow">QUICK PLANNING</p>
+  <h1>Add several tasks</h1>
+  <p class="welcome-note">One task per line. Set a shared schedule once, then get straight back to your day.</p>
+</section>
+<div class="bulk-layout">
+  <section class="bulk-panel">
+    <form method="post" class="bulk-form">
+      {% csrf_token %}
+      <label for="{{ form.titles.id_for_label }}">Your tasks</label>
+      {{ form.titles }}
+      {% if form.titles.errors %}<div class="form-error" role="alert">{{ form.titles.errors }}</div>{% endif %}
+      <p class="field-hint">Paste a list or type one task per line. Up to 100 tasks at once.</p>
+      <div class="bulk-shared-heading"><h2>Shared task details</h2><span>Applied to every task</span></div>
+      <div class="bulk-settings-grid">
+        <div><label for="{{ form.category.id_for_label }}">Category</label>{{ form.category }}</div>
+        <div><label for="{{ form.priority.id_for_label }}">Priority</label>{{ form.priority }}</div>
+        <div><label for="{{ form.due_date.id_for_label }}">Due date</label>{{ form.due_date }}</div>
+        <div><label for="{{ form.due_time.id_for_label }}">Due time</label>{{ form.due_time }}</div>
+        <div><label for="{{ form.reminder_interval_minutes.id_for_label }}">Reminder</label>{{ form.reminder_interval_minutes }}</div>
+        <div><label for="{{ form.deliverable_minutes.id_for_label }}">Deliverable time (minutes)</label>{{ form.deliverable_minutes }}</div>
+      </div>
+      {% for field in form %}{% if field.errors and field.name != "titles" %}<div class="form-error" role="alert">{{ field.label }}: {{ field.errors }}</div>{% endif %}{% endfor %}
+      <div class="bulk-actions"><a href="{% url 'dashboard' %}">Cancel</a><button type="submit" class="btn-focus">Add <span id="bulk-count">0</span> tasks</button></div>
+    </form>
+  </section>
+  <aside class="bulk-help"><span class="details-icon" aria-hidden="true">✳</span><h2>Make a plan, not a pile</h2><p>Shared dates, reminders and estimates make it easy to turn a list of ideas into a day you can actually finish.</p><a href="{% url 'planner' %}">See your daily planner →</a></aside>
+</div>
+{% endblock %}
+{% block scripts %}<script>
+const titles=document.getElementById("{{ form.titles.id_for_label }}"),count=document.getElementById("bulk-count");
+function updateCount(){count.textContent=String(titles.value.split(/\r?\n/).filter(line=>line.trim()).length);}
+titles.addEventListener("input",updateCount);updateCount();
+</script>{% endblock %}
