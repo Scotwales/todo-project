@@ -7,7 +7,8 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from django.contrib import messages
 from django.conf import settings
-from django.db import connection
+from django.core.management import call_command
+from django.db import DatabaseError, connection
 from django.db.models import Q, Sum
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -22,6 +23,7 @@ from .models import (
 )
 from .planning import actual_seconds, due_datetime, generate_occurrences, tracked_seconds_between
 from config.release import APP_NAME, APP_VERSION, BUILD_DATE, RELEASE_NOTES
+from config.startup import backup_connection_before_migration, validate_database_integrity
 from config.user_settings import read_preferences, save_preferences
 
 logger = logging.getLogger(__name__)
@@ -593,6 +595,8 @@ def restore_database(request):
         return redirect("settings")
     upload = form.cleaned_data["backup"]
     temp_path = None
+    rollback_backup = None
+    restored = False
     try:
         with tempfile.NamedTemporaryFile(suffix=".sqlite3", delete=False) as temporary:
             temp_path = Path(temporary.name)
@@ -621,13 +625,39 @@ def restore_database(request):
             if source.execute("PRAGMA foreign_key_check").fetchone():
                 raise ValueError("The backup contains invalid task references.")
             connection.ensure_connection()
+            rollback_backup = backup_connection_before_migration(
+                connection.connection, settings.BACKUP_DIR, prefix="pre-restore"
+            )
             source.backup(connection.connection)
+            restored = True
         finally:
             source.close()
+        connection.close()
+        connection.ensure_connection()
+        backup_connection_before_migration(connection.connection, settings.BACKUP_DIR)
+        call_command("migrate", interactive=False, verbosity=0)
+        validate_database_integrity(connection.settings_dict["NAME"])
         messages.success(request, "Backup restored.")
-    except (sqlite3.DatabaseError, ValueError, OSError) as exc:
+    except (sqlite3.DatabaseError, DatabaseError, ValueError, OSError, RuntimeError) as exc:
         logger.warning("Backup restore rejected: %s", exc)
-        messages.error(request, f"Backup was not restored: {exc}")
+        if rollback_backup and restored:
+            try:
+                connection.close()
+                connection.ensure_connection()
+                with sqlite3.connect(str(rollback_backup), timeout=20) as previous:
+                    previous.backup(connection.connection)
+                connection.close()
+            except (sqlite3.DatabaseError, DatabaseError, OSError) as rollback_error:
+                logger.exception("Unable to restore the pre-restore database backup")
+                messages.error(
+                    request,
+                    f"Backup restore failed ({exc}) and the previous database could not be "
+                    f"restored ({rollback_error}). The safety copy is at {rollback_backup}.",
+                )
+            else:
+                messages.error(request, f"Backup was not restored; the previous data was recovered: {exc}")
+        else:
+            messages.error(request, f"Backup was not restored: {exc}")
     finally:
         if temp_path:
             temp_path.unlink(missing_ok=True)

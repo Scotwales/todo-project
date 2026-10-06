@@ -101,6 +101,28 @@ def backup_database_before_migration(database_path, backup_dir):
     return destination
 
 
+def backup_connection_before_migration(database, backup_dir, prefix="pre-migration"):
+    backup_dir = Path(backup_dir)
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    stamp = timezone.localtime().strftime("%Y%m%d-%H%M%S-%f")
+    destination = backup_dir / f"{prefix}-{stamp}.sqlite3"
+    temporary = destination.with_suffix(".sqlite3.tmp")
+    try:
+        with closing(sqlite3.connect(str(temporary), timeout=20)) as backup:
+            database.backup(backup)
+            result = backup.execute("PRAGMA integrity_check").fetchone()
+            if not result or result[0] != "ok":
+                raise RuntimeError(f"{prefix} backup failed integrity validation: {result!r}")
+            foreign_key_errors = backup.execute("PRAGMA foreign_key_check").fetchone()
+            if foreign_key_errors:
+                raise RuntimeError(f"{prefix} backup has invalid references: {foreign_key_errors!r}")
+        temporary.replace(destination)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
+    return destination
+
+
 def run_startup_migrations(data_dir, backup_dir, legacy_data_dir=None):
     initialize_data_directories(Path(data_dir), legacy_data_dir)
     database_path = Path(connection.settings_dict["NAME"])
