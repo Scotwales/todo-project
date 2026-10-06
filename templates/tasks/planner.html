@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Daily planner{% endblock %}
+{% block content %}
+<section class="planner-header">
+  <div><p class="eyebrow">MAKE ROOM FOR WHAT MATTERS</p><h1>Daily planner</h1><p class="welcome-note">{{ day|date:"l, F j" }} · {{ workload_minutes }} min estimated remaining</p></div>
+  <div class="planner-date-nav"><a href="?date={{ previous|date:'Y-m-d' }}" aria-label="Previous day">‹</a><a href="{% url 'planner' %}">Today</a><a href="?date={{ next_day|date:'Y-m-d' }}" aria-label="Next day">›</a></div>
+</section>
+<section class="planner-panel">
+  <div class="planner-scale">
+    {% for hour in hours %}<div class="planner-hour"><span>{{ hour.label }}</span><i></i></div>{% endfor %}
+    {% for item in schedule %}
+    <article class="planner-event priority-event-{{ item.task.priority }} {% if item.task.is_completed %}is-done{% endif %}" style="top:{{ item.top }}px;height:{{ item.height }}px;left:{{ item.left }}%;width:{{ item.width }}%;right:auto" title="{{ item.task.title }} · {{ item.duration }} min">
+      <strong>{{ item.task.title }}</strong><span>{% if item.task.due_time %}Due {{ item.task.due_time|time:"g:i A" }} · {% else %}Flexible · {% endif %}{{ item.duration }} min</span>
+    </article>
+    {% endfor %}
+  </div>
+  {% if not schedule %}<div class="planner-empty"><h2>A little room to breathe</h2><p>Add tasks with due times or deliverable estimates and they’ll appear on your schedule.</p><a class="btn-focus" href="{% url 'dashboard' %}">Add a task</a></div>{% endif %}
+</section>
+<p class="planner-footnote">Timed tasks are planned backward from their due time using Deliverable Time. Flexible tasks start from 9:00 AM and move around fixed appointments to avoid overlap. Tasks without an estimate use a 30-minute planning block.</p>
+{% endblock %}

@@ -8,7 +8,7 @@
 <div class="calendar-grid calendar-head"><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div></div>
 <div class="calendar-grid">
 {% for item in days %}<section class="calendar-day {% if not item.in_month %}outside-month{% endif %}"><div class="calendar-date {% if item.date == today %}today{% endif %}">{{ item.date.day }}</div>
-  {% for task in item.tasks|slice:":3" %}<div class="calendar-task {% if task.recurrence == 'none' and task.is_completed or task.id in item.completed_recurring %}calendar-done{% endif %}" title="{{ task.title }}">{{ task.title }}</div>{% endfor %}
+  {% for task in item.tasks|slice:":3" %}<div class="calendar-task priority-calendar-{{ task.priority }} {% if task.recurrence == 'none' and task.is_completed or task.id in item.completed_recurring %}calendar-done{% endif %}" title="{{ task.title }}">{{ task.title }}</div>{% endfor %}
   {% if item.tasks|length > 3 %}<small class="text-secondary">+{{ item.tasks|length|add:"-3" }} more</small>{% endif %}
 </section>{% endfor %}
 </div>

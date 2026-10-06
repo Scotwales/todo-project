@@ -1,57 +1,144 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Today{% endblock %}
-{% block head %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>{% endblock %}
+{% block head %}<script src="{% static 'vendor/chart.umd.min.js' %}"></script>{% endblock %}
 {% block content %}
-<div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4">
-  <div><p class="eyebrow mb-1">YOUR DAILY CHECKLIST</p><h1 class="mb-1">{{ today|date:"l, F j" }}</h1><p class="text-secondary mb-0">{{ completed_count }} of {{ task_count }} tasks complete</p></div>
-  <div class="progress-ring"><strong>{{ completed_count }} / {{ task_count }}</strong><span>done today</span></div>
-</div>
-<div class="row g-4">
-  <section class="col-lg-7">
-    <div class="card panel mb-4"><div class="card-body p-4">
-      <div class="d-flex justify-content-between align-items-center mb-3"><h2 class="h5 mb-0">Today’s checklist</h2><span class="badge text-bg-light">{{ task_count }} tasks</span></div>
+<section class="welcome-row">
+  <div><p class="eyebrow">{{ today|date:"l, F j"|upper }}</p><h1><span id="greeting">Good morning</span><span class="greeting-wave" aria-hidden="true"> ✳</span></h1><p class="welcome-note">{% if task_count %}A clear mind starts with one thing at a time. You have {{ pending_count }} remaining tasks today.{% else %}A little space for what matters today.{% endif %}</p></div>
+</section>
+
+<div class="workspace-grid">
+  <section class="main-column">
+    <div class="focus-heading">
+      <div><p class="eyebrow mb-2">YOUR DAY</p><h2>Today’s focus</h2></div>
+      <span class="date-pill">{{ today|date:"D, M j" }}</span>
+    </div>
+    <section class="progress-panel" aria-label="Daily completion progress">
+      <div class="progress-copy"><strong>{% if task_count %}{% widthratio completed_count task_count 100 %}{% else %}0{% endif %}%</strong><span>{{ completed_count }} of {{ task_count }} completed</span></div>
+      <div class="day-progress" role="progressbar" aria-label="Tasks completed today" aria-valuenow="{{ completed_count }}" aria-valuemin="0" aria-valuemax="{% if task_count %}{{ task_count }}{% else %}1{% endif %}"><span style="width:{% if task_count %}{% widthratio completed_count task_count 100 %}{% else %}0{% endif %}%"></span></div>
+    </section>
+    <section class="workload-panel" aria-label="Today's estimated and actual workload">
+      <div><span class="workload-icon" aria-hidden="true">◷</span><span><strong>Today’s workload</strong><small>Estimated time remaining</small></span></div>
+      <strong class="workload-total">{{ workload_minutes }} min</strong>
+      <span class="workload-actual">Tracked {{ actual_today_minutes }} min · {{ workload_hours|floatformat:1 }}h left</span>
+    </section>
+
+    <section class="quick-add-panel" aria-label="Quick add task">
+      <span class="quick-add-plus" aria-hidden="true">＋</span>
+      <form method="post" action="{% url 'create_task' %}" class="quick-add-form">
+        {% csrf_token %}
+        <label class="visually-hidden" for="{{ form.title.id_for_label }}">What needs to be done?</label>
+        {{ form.title }}
+        <input type="hidden" name="due_date" value="{{ today|date:'Y-m-d' }}">
+        <input type="hidden" name="recurrence" value="none">
+        <button type="submit" aria-label="Add task">Add task <span aria-hidden="true">↵</span></button>
+        <details class="quick-add-more">
+          <summary aria-label="Show task options">···</summary>
+          <div class="quick-add-options">
+            <label for="{{ form.category.id_for_label }}">Category</label>{{ form.category }}
+            <label for="{{ form.due_time.id_for_label }}">Due time</label>{{ form.due_time }}
+            <label for="{{ form.priority.id_for_label }}">Priority</label>{{ form.priority }}
+            <label for="{{ form.deliverable_minutes.id_for_label }}">Deliverable time (min)</label>{{ form.deliverable_minutes }}
+            <label for="{{ form.reminder_interval_minutes.id_for_label }}">Reminder</label>{{ form.reminder_interval_minutes }}
+            <label for="{{ form.recurrence.id_for_label }}">Repeat</label>{{ form.recurrence }}
+            <div class="quick-weekdays" hidden><span>Repeat on</span>{{ form.weekdays }}</div>
+            {{ form.reminder_at.as_hidden }}
+          </div>
+        </details>
+      </form>
+    </section>
+
+    <section class="task-section" id="task-list">
+      <div class="task-section-heading"><h2>Your tasks</h2><span>{{ task_count }}{% if task_count == 1 %} task{% else %} tasks{% endif %}</span></div>
       {% if tasks %}
       <div class="task-list">
       {% for task in tasks %}
-        <article class="task-row {% if task.recurrence == 'none' and task.is_completed or task.recurrence != 'none' and task.id in completed_recurring %}is-done{% endif %}">
-          <form method="post" action="{% url 'toggle_task' task.id %}" class="d-flex align-items-start gap-3 flex-grow-1">{% csrf_token %}<input type="hidden" name="date" value="{{ today|date:'Y-m-d' }}">
-            <button class="task-check" aria-label="Toggle {{ task.title }}" type="submit">{% if task.recurrence == 'none' and task.is_completed or task.recurrence != 'none' and task.id in completed_recurring %}✓{% endif %}</button>
-            <span class="flex-grow-1"><span class="task-title">{{ task.title }}</span><span class="task-meta">{% if task.due_time %}{{ task.due_time|time:"g:i A" }} · {% endif %}{{ task.get_priority_display }}{% if task.recurrence != 'none' %} · {{ task.get_recurrence_display }}{% endif %}</span></span>
+        <article class="task-card {% if task.is_completed %}is-done{% endif %}"
+          data-id="{{ task.id }}" data-update-url="{% url 'update_task' task.id %}" data-timer-url="{% url 'task_timer' task.id 'start' %}" data-title="{{ task.title }}" data-notes="{{ task.notes }}" data-category="{{ task.category }}" data-date="{% if task.due_date %}{{ task.due_date|date:'M j, Y' }}{% else %}No due date{% endif %}" data-date-value="{% if task.due_date %}{{ task.due_date|date:'Y-m-d' }}{% endif %}" data-time="{% if task.due_time %}{{ task.due_time|time:'g:i A' }}{% else %}No time set{% endif %}" data-time-value="{% if task.due_time %}{{ task.due_time|time:'H:i' }}{% endif %}" data-priority="{{ task.get_priority_display }}" data-priority-value="{{ task.priority }}" data-recurrence="{% if task.recurring_template %}{{ task.recurring_template.get_recurrence_display }}{% else %}{{ task.get_recurrence_display }}{% endif %}" data-recurrence-value="{% if task.recurring_template %}{{ task.recurring_template.recurrence }}{% else %}{{ task.recurrence }}{% endif %}" data-series="{% if task.recurring_template_id %}true{% else %}false{% endif %}" data-weekdays="{% for weekday in task.weekdays %}{{ weekday }},{% endfor %}" data-deliverable="{{ task.deliverable_minutes|default_if_none:'' }}" data-reminder="{{ task.reminder_interval_minutes|default_if_none:'' }}" data-reminder-at="{% if task.reminder_at %}{{ task.reminder_at|date:'c' }}{% endif %}" data-actual-seconds="{{ task.actual_seconds }}" data-created="{{ task.created_at|date:'M j, Y' }}" tabindex="0" aria-label="Show details for {{ task.title }}">
+          <form method="post" action="{% url 'toggle_task' task.id %}" class="task-completion">{% csrf_token %}<input type="hidden" name="date" value="{{ today|date:'Y-m-d' }}">
+            <button class="task-check" aria-label="{% if task.is_completed %}Mark {{ task.title }} incomplete{% else %}Complete {{ task.title }}{% endif %}" type="submit">{% if task.is_completed %}<span aria-hidden="true">✓</span>{% endif %}</button>
           </form>
-          <form method="post" action="{% url 'delete_task' task.id %}">{% csrf_token %}<input type="hidden" name="next" value="dashboard"><button class="btn btn-sm btn-link text-secondary" aria-label="Delete {{ task.title }}">×</button></form>
+          <div class="task-card-copy"><h3 class="task-title">{{ task.title }}</h3><div class="task-meta">{% if task.due_time %}<span aria-hidden="true">◷</span> {{ task.due_time|time:"g:i A" }}<span class="meta-separator">·</span>{% endif %}<span class="priority-dot priority-{{ task.priority }}"></span>{{ task.get_priority_display }}{% if task.category %}<span class="meta-separator">·</span>{{ task.category }}{% endif %}{% if task.recurring_template %}<span class="meta-separator">·</span>{{ task.recurring_template.get_recurrence_display }}{% endif %}{% if task.deliverable_minutes %}<span class="meta-separator">·</span>{{ task.deliverable_minutes }} min{% endif %}</div></div>
+          <button type="button" class="task-timer-button {% if task.id == active_task_id %}timer-running{% endif %}" data-action="{% if task.id == active_task_id %}pause{% else %}start{% endif %}" aria-label="{% if task.id == active_task_id %}Pause timer for {{ task.title }}{% else %}Start timer for {{ task.title }}{% endif %}">{% if task.id == active_task_id %}Ⅱ{% else %}▶{% endif %}</button>
+          <button class="task-open" type="button" aria-label="View details for {{ task.title }}">›</button>
+          <form method="post" action="{% url 'duplicate_task' task.id %}" class="task-duplicate">{% csrf_token %}<input type="hidden" name="next" value="dashboard"><button type="submit" aria-label="Duplicate {{ task.title }}" title="Duplicate task">⧉</button></form>
+          <form method="post" action="{% url 'delete_task' task.id %}" class="task-delete">{% csrf_token %}<input type="hidden" name="next" value="dashboard"><button type="submit" aria-label="Delete {{ task.title }}" title="Delete task">×</button></form>
         </article>
       {% endfor %}
       </div>
-      {% else %}<div class="empty-state"><span>☕</span><p>Nothing on your list yet. Add a task to get started.</p></div>{% endif %}
-    </div></div>
-    <div class="card panel"><div class="card-body p-4"><h2 class="h5 mb-3">Quick add</h2>
-      <form method="post" action="{% url 'create_task' %}">{% csrf_token %}
-        <div class="mb-3">{{ form.title }}</div>
-        <details><summary class="small text-secondary mb-3">Date, reminder and more</summary>
-          <div class="row g-2 mb-3"><div class="col-md-6">{{ form.due_date }}</div><div class="col-md-6">{{ form.due_time }}</div><div class="col-md-6">{{ form.reminder_at }}</div><div class="col-md-6">{{ form.recurrence }}</div><div class="col-md-6">{{ form.priority }}</div></div>{{ form.notes }}
-        </details>
-        <button class="btn btn-primary mt-3" type="submit">Add task</button>
-      </form>
-    </div></div>
+      {% else %}<div class="empty-state"><span class="empty-spark" aria-hidden="true">✳</span><h3>Your day is wide open</h3><p>Add a task above and give your day a little direction.</p></div>{% endif %}
+    </section>
+
+    <section class="upcoming-section">
+      <div class="task-section-heading"><h2>Coming up</h2><a href="{% url 'calendar' %}">Open calendar <span aria-hidden="true">→</span></a></div>
+      {% for task in upcoming %}<div class="upcoming-row"><span class="upcoming-dot priority-dot priority-{{ task.priority }}"></span><span class="upcoming-title">{{ task.title }}</span><time>{{ task.due_date|date:"M j" }}</time></div>{% empty %}<p class="muted-copy">No upcoming one-off tasks. Enjoy the breathing room.</p>{% endfor %}
+    </section>
   </section>
-  <aside class="col-lg-5">
-    <div class="card panel mb-4"><div class="card-body p-4"><h2 class="h5 mb-3">This week</h2><canvas id="weekly-chart" height="210" aria-label="Completed tasks by day"></canvas></div></div>
-    <div class="card panel mb-4"><div class="card-body p-4"><div class="d-flex justify-content-between"><h2 class="h5">Pomodoro</h2><span class="text-secondary small">Focus session</span></div>
-      {% if active_pomodoro %}<div class="timer" data-started="{{ active_pomodoro.started_at|date:'c' }}" data-duration="{{ active_pomodoro.duration_minutes }}"><strong id="timer-display">25:00</strong><span>remaining</span></div><form id="finish-pomodoro" method="post" action="{% url 'finish_pomodoro' active_pomodoro.id %}">{% csrf_token %}<button class="btn btn-outline-secondary btn-sm w-100">End session</button></form>
-      {% else %}<form method="post" action="{% url 'pomodoro' %}" class="d-flex gap-2">{% csrf_token %}<select name="duration" class="form-select" aria-label="Pomodoro duration"><option value="25">25 min</option><option value="15">15 min</option><option value="45">45 min</option><option value="60">60 min</option></select><button class="btn btn-primary text-nowrap">Start focus</button></form>{% endif %}
-    </div></div>
-    <div class="card panel"><div class="card-body p-4"><h2 class="h5 mb-3">Coming up</h2>
-      {% for task in upcoming %}<div class="upcoming-row"><span>{{ task.title }}</span><time>{{ task.due_date|date:"M j" }}</time></div>{% empty %}<p class="text-secondary small mb-0">No upcoming one-off tasks.</p>{% endfor %}
-    </div></div>
+
+  <aside class="details-column">
+    <section class="details-panel" id="task-details" aria-live="polite">
+      <div class="details-empty"><span class="details-icon" aria-hidden="true">↖</span><h2>Your task details</h2><p>Select a task to see its notes, schedule, and reminder.</p></div>
+      <div class="details-content" hidden>
+        <p class="eyebrow">TASK DETAILS</p><h2 class="details-title"></h2>
+        <div class="details-tags"><span class="detail-priority"></span><span class="detail-recurrence"></span></div>
+        <div class="detail-field"><span>Due date</span><strong class="detail-date"></strong></div>
+        <div class="detail-field"><span>Due time</span><strong class="detail-time"></strong></div>
+        <div class="detail-field"><span>Reminder</span><strong class="detail-reminder"></strong></div>
+        <div class="detail-field"><span>Category</span><strong class="detail-category"></strong></div>
+        <div class="detail-field"><span>Deliverable time</span><strong class="detail-deliverable"></strong></div>
+        <div class="detail-field"><span>Actual time</span><strong class="detail-actual"></strong></div>
+        <div class="detail-notes"><span class="detail-label">Notes</span><p class="detail-note-copy"></p></div>
+        <div class="detail-created"><span class="detail-label">Created</span><p class="detail-created-date"></p></div>
+        <button id="detail-timer-stop" class="detail-edit-cancel" type="button">Stop timer</button>
+        <div class="extend-control"><label for="detail-extend">Extend task</label><div><select id="detail-extend" class="form-select"><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option><option value="120">2 hours</option><option value="tomorrow">Tomorrow</option><option value="custom">Custom duration</option></select><input id="detail-custom-minutes" class="form-control" type="number" min="1" max="1440" placeholder="Minutes" hidden><button id="detail-extend-button" class="detail-edit-save" type="button">Extend</button></div></div>
+        <button type="button" class="detail-edit-toggle">Edit task</button>
+      </div>
+      <form method="post" class="detail-edit-form" hidden>
+        {% csrf_token %}
+        <p class="eyebrow">EDIT TASK</p>
+        <label for="edit-title">Title</label><input id="edit-title" class="form-control" name="title" maxlength="200" required>
+        <label for="edit-notes">Notes</label><textarea id="edit-notes" class="form-control" name="notes" rows="3"></textarea>
+        <label for="edit-category">Category</label><input id="edit-category" class="form-control" name="category" maxlength="80">
+        <div class="detail-edit-row"><span><label for="edit-date">Due date</label><input id="edit-date" class="form-control" type="date" name="due_date"></span><span><label for="edit-time">Due time</label><input id="edit-time" class="form-control" type="time" name="due_time"></span></div>
+        <label for="edit-reminder-interval">Reminder</label><select id="edit-reminder-interval" class="form-select" name="reminder_interval_minutes"><option value="">No reminder</option><option value="5">5 minutes before</option><option value="10">10 minutes before</option><option value="15">15 minutes before</option><option value="30">30 minutes before</option><option value="60">1 hour before</option></select>{{ form.reminder_at.as_hidden }}
+        <label for="edit-deliverable">Deliverable time (minutes)</label><input id="edit-deliverable" class="form-control" type="number" name="deliverable_minutes" min="1" max="1440">
+        <div class="detail-edit-row"><span><label for="edit-priority">Priority</label><select id="edit-priority" class="form-select" name="priority"><option value="1">Low</option><option value="2">Normal</option><option value="3">High</option></select></span><span><label for="edit-recurrence">Repeat</label><select id="edit-recurrence" class="form-select" name="recurrence"><option value="none">Does not repeat</option><option value="daily">Daily</option><option value="weekdays">Weekdays</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="custom">Selected days</option></select></span></div>
+        <fieldset class="edit-weekdays" hidden><legend>Repeat on</legend>{% for value,label in form.weekdays.field.choices %}<label><input type="checkbox" name="weekdays" value="{{ value }}"> {{ label }}</label>{% endfor %}</fieldset>
+        <label class="apply-series-option" hidden><input type="checkbox" name="apply_to_series"> Apply changes to this recurring schedule</label>
+        <div class="detail-edit-actions"><button type="button" class="detail-edit-cancel">Cancel</button><button type="submit" class="detail-edit-save">Save changes</button></div>
+      </form>
+    </section>
+    <section class="side-widget" id="focus-session">
+      <div class="widget-heading"><div><p class="eyebrow">MAKE SPACE</p><h2>Focus session</h2></div><span class="focus-orb" aria-hidden="true">◉</span></div>
+      {% if active_pomodoro %}
+      <div class="timer" data-started="{{ active_pomodoro.started_at|date:'c' }}" data-duration="{{ active_pomodoro.duration_minutes }}"><strong id="timer-display">25:00</strong><span>minutes of focus</span></div>
+      <form id="finish-pomodoro" method="post" action="{% url 'finish_pomodoro' active_pomodoro.id %}">{% csrf_token %}<button class="btn-focus btn-focus-secondary w-100">End session</button></form>
+      {% else %}
+      <p class="widget-copy">One thing at a time. Give yourself a little room to focus.</p>
+      <form method="post" action="{% url 'pomodoro' %}" class="focus-form">{% csrf_token %}<label class="visually-hidden" for="focus-duration">Session length</label><select id="focus-duration" name="duration" class="form-select"><option value="25">25 minutes</option><option value="15">15 minutes</option><option value="45">45 minutes</option><option value="60">60 minutes</option></select><button class="btn-focus">Start focus <span aria-hidden="true">→</span></button></form>
+      {% endif %}
+    </section>
+    <section class="weekly-widget">    <div class="widget-heading"><div><p class="eyebrow">LITTLE BY LITTLE</p><h2>This week</h2></div><a href="{% url 'analytics' %}">Analytics →</a></div><canvas id="weekly-chart" height="170" aria-label="Completed tasks by day"></canvas></section>
   </aside>
 </div>
 {{ chart_labels|json_script:"chart-labels" }}{{ chart_completed|json_script:"chart-completed" }}{{ chart_created|json_script:"chart-created" }}
 {% endblock %}
 {% block scripts %}<script>
 const labels=JSON.parse(document.getElementById("chart-labels").textContent), completed=JSON.parse(document.getElementById("chart-completed").textContent), created=JSON.parse(document.getElementById("chart-created").textContent);
-if(window.Chart){new Chart(document.getElementById("weekly-chart"),{type:"bar",data:{labels,datasets:[{label:"Completed",data:completed,backgroundColor:"#6c63ff",borderRadius:5},{label:"Added",data:created,backgroundColor:"#dfe1f4",borderRadius:5}]},options:{responsive:true,plugins:{legend:{position:"bottom"}},scales:{y:{beginAtZero:true,ticks:{precision:0}}}}});}
+if(window.Chart){new Chart(document.getElementById("weekly-chart"),{type:"bar",data:{labels,datasets:[{label:"Done",data:completed,backgroundColor:"#8d86ee",borderRadius:5,maxBarThickness:18},{label:"Added",data:created,backgroundColor:"#e8e8f1",borderRadius:5,maxBarThickness:18}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{color:"#9293a5"}},y:{beginAtZero:true,grid:{color:"rgba(130,130,150,.12)"},ticks:{precision:0,color:"#9293a5"}}}}});}
 const timer=document.querySelector(".timer");
 if(timer){const display=document.getElementById("timer-display"), end=new Date(timer.dataset.started).getTime()+Number(timer.dataset.duration)*60000;function tick(){const left=Math.max(0,Math.ceil((end-Date.now())/1000));display.textContent=String(Math.floor(left/60)).padStart(2,"0")+":"+String(left%60).padStart(2,"0");if(left===0){document.title="Focus complete · Daily";document.getElementById("finish-pomodoro").submit();return;}setTimeout(tick,1000);}tick();}
-const pomodoroForm=document.querySelector('form[action="{% url 'pomodoro' %}"]');
-if(pomodoroForm&&"Notification" in window&&Notification.permission==="default"){pomodoroForm.addEventListener("submit",()=>Notification.requestPermission());}
+const details=document.querySelector(".details-panel"), editForm=details?.querySelector(".detail-edit-form"), reminderToken=document.querySelector("[name=csrfmiddlewaretoken]")?.value;
+let selectedTask=null;
+function showTask(card){if(!details)return;selectedTask=card;details.querySelector(".details-empty").hidden=true;const content=details.querySelector(".details-content");content.hidden=false;editForm.hidden=true;content.querySelector(".details-title").textContent=card.dataset.title;content.querySelector(".detail-priority").textContent=card.dataset.priority+" priority";content.querySelector(".detail-recurrence").textContent=card.dataset.recurrence;content.querySelector(".detail-date").textContent=card.dataset.date;content.querySelector(".detail-time").textContent=card.dataset.time;content.querySelector(".detail-reminder").textContent=card.dataset.reminder?card.dataset.reminder+" min before":"No reminder";content.querySelector(".detail-category").textContent=card.dataset.category||"No category";content.querySelector(".detail-deliverable").textContent=card.dataset.deliverable?card.dataset.deliverable+" minutes":"Not estimated";content.querySelector(".detail-actual").textContent=Math.floor(Number(card.dataset.actualSeconds)/60)+" minutes tracked";content.querySelector(".detail-note-copy").textContent=card.dataset.notes||"No notes added.";content.querySelector(".detail-created-date").textContent=card.dataset.created;editForm.action=card.dataset.updateUrl;editForm.elements.title.value=card.dataset.title;editForm.elements.notes.value=card.dataset.notes;editForm.elements.category.value=card.dataset.category;editForm.elements.due_date.value=card.dataset.dateValue;editForm.elements.due_time.value=card.dataset.timeValue;editForm.elements.priority.value=card.dataset.priorityValue;editForm.elements.recurrence.value=card.dataset.recurrenceValue;editForm.elements.deliverable_minutes.value=card.dataset.deliverable;editForm.elements.reminder_interval_minutes.value=card.dataset.reminder;editForm.elements.reminder_at.value=card.dataset.reminderAt?new Date(new Date(card.dataset.reminderAt).getTime()-new Date(card.dataset.reminderAt).getTimezoneOffset()*60000).toISOString().slice(0,16):"";editForm.querySelectorAll('[name="weekdays"]').forEach(input=>input.checked=card.dataset.weekdays.split(",").includes(input.value));details.querySelector(".edit-weekdays").hidden=editForm.elements.recurrence.value!=="custom";const series=editForm.querySelector(".apply-series-option");series.hidden=card.dataset.series!=="true";if(editForm.elements.apply_to_series)editForm.elements.apply_to_series.checked=false;}
+document.querySelectorAll(".task-card").forEach(card=>{card.addEventListener("click",event=>{if(event.target.closest("form,.task-timer-button"))return;showTask(card);});card.addEventListener("keydown",event=>{if((event.key==="Enter"||event.key===" ")&&event.target===card){event.preventDefault();showTask(card);}});});
+details?.querySelector(".detail-edit-toggle").addEventListener("click",()=>{details.querySelector(".details-content").hidden=true;editForm.hidden=false;editForm.elements.title.focus();});
+details?.querySelector(".detail-edit-cancel").addEventListener("click",()=>{editForm.hidden=true;details.querySelector(".details-content").hidden=false;});
+editForm?.elements.recurrence.addEventListener("change",()=>{details.querySelector(".edit-weekdays").hidden=editForm.elements.recurrence.value!=="custom";});
+document.getElementById("detail-extend")?.addEventListener("change",event=>{document.getElementById("detail-custom-minutes").hidden=event.target.value!=="custom";});
+document.getElementById("detail-extend-button")?.addEventListener("click",async()=>{if(!selectedTask)return;const payload=new URLSearchParams({option:document.getElementById("detail-extend").value,custom_minutes:document.getElementById("detail-custom-minutes").value});const response=await fetch(`/tasks/${selectedTask.dataset.id}/extend/`,{method:"POST",headers:{"X-CSRFToken":reminderToken,"Content-Type":"application/x-www-form-urlencoded"},body:payload});if(!response.ok){const result=await response.json();alert(result.error);return;}location.reload();});
+document.getElementById("detail-timer-stop")?.addEventListener("click",async()=>{if(!selectedTask)return;const response=await fetch(selectedTask.dataset.timerUrl.replace(/start\/$/,"stop/"),{method:"POST",headers:{"X-CSRFToken":reminderToken}});if(!response.ok){alert("The task timer could not be stopped.");return;}location.reload();});
+document.querySelectorAll(".task-timer-button").forEach(button=>button.addEventListener("click",async event=>{event.stopPropagation();const card=button.closest(".task-card"),action=button.dataset.action,url=card.dataset.timerUrl.replace(/start\/$/,action+"/");const response=await fetch(url,{method:"POST",headers:{"X-CSRFToken":reminderToken}});if(!response.ok){alert("The task timer could not be updated.");return;}location.reload();}));
+const recurrenceQuick=document.querySelector(".quick-add-options select[name=recurrence]");recurrenceQuick?.addEventListener("change",()=>{document.querySelector(".quick-weekdays").hidden=recurrenceQuick.value!=="custom";});
+const greeting=document.getElementById("greeting");if(greeting){const hour=new Date().getHours();greeting.textContent=hour<12?"Good morning":hour<18?"Good afternoon":"Good evening";}
 </script>{% endblock %}

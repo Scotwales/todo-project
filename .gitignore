@@ -4,4 +4,7 @@ __pycache__/
 db.sqlite3
 data/
 staticfiles/
+build/
+dist/
+*.spec.bak
 .pytest_cache/
