@@ -1,14 +1,16 @@
 import io
 import sqlite3
 import tempfile
+from contextlib import closing
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import IntegrityError
+from django.db import IntegrityError, connections
 from django.test import TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from django.db.migrations.executor import MigrationExecutor
 from openpyxl import load_workbook
 from .models import (
     DesktopNotification, PomodoroSession, RecurringSchedule, Task, TaskCompletion,
@@ -425,6 +427,42 @@ class TaskViewTests(TransactionTestCase):
         upload = SimpleUploadedFile("daily.sqlite3", backup.content, content_type="application/vnd.sqlite3")
         self.client.post(reverse("restore"), {"backup": upload})
         self.assertTrue(Task.objects.filter(title="Restore me").exists())
+
+    def test_restoring_older_backup_migrates_schema_before_reporting_success(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database_path = Path(directory) / "legacy.sqlite3"
+            target = ("tasks", "0002_pomodorosession_pomo_completed_idx_and_more")
+            legacy_connection = connections["default"]
+            try:
+                executor = MigrationExecutor(legacy_connection)
+                executor.migrate([target])
+                historical_apps = executor.loader.project_state([target]).apps
+                old_task = historical_apps.get_model("tasks", "Task")
+                old_task.objects.using("default").create(
+                    title="Task from an older release", due_date=timezone.localdate()
+                )
+                legacy_connection.ensure_connection()
+                with closing(sqlite3.connect(database_path)) as backup:
+                    legacy_connection.connection.backup(backup)
+
+                upload = SimpleUploadedFile(
+                    "legacy.sqlite3", database_path.read_bytes(), content_type="application/vnd.sqlite3"
+                )
+                with override_settings(BACKUP_DIR=Path(directory) / "backups"):
+                    response = self.client.post(reverse("restore"), {"backup": upload})
+
+                self.assertEqual(response.status_code, 302)
+                restored = Task.objects.get(title="Task from an older release")
+                self.assertEqual(restored.category, "")
+                current_executor = MigrationExecutor(connections["default"])
+                self.assertFalse(
+                    current_executor.migration_plan(current_executor.loader.graph.leaf_nodes())
+                )
+                self.assertTrue(list((Path(directory) / "backups").glob("pre-migration-*.sqlite3")))
+            finally:
+                legacy_connection.close()
+                executor = MigrationExecutor(legacy_connection)
+                executor.migrate(executor.loader.graph.leaf_nodes())
 
     def test_restore_rejects_unrecognized_database(self):
         data = io.BytesIO(b"not a database")
